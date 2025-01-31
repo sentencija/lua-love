@@ -1,5 +1,5 @@
 local mineCountParamName = "Mine count"
-basicModule = {
+local basicModule = {
 	params = {
 		mine = {
 			[mineCountParamName] = function (w, h, params)

@@ -7,14 +7,108 @@ mineCount = 10
 bigCellWidth = 3
 bigCellHeight = 3
 moduleNames = {
-	"basic"
+	"basic",
+	"horizontal"
 }
+function createSet(array)
+	local result = {}
+	for i=1,#array do
+		result[array[i]] = true
+	end
+	return result
+end
+function createDependencyTree()
+	local resolvedDependencies = {}
+	buildLayers = {}
+	local unresolvedDependencies = {}
+	local layer = {}
+	for i=1,#moduleNames do
+		local module = moduleNames[i]
+		if not pcall(require, module .. "_dependencies") or dependencies == nil then
+			resolvedDependencies[module] = true 
+			table.insert(layer, module) 
+		else table.insert(unresolvedDependencies, {module = module, dependencies = createSet(dependencies)})
+		end
+	end
+	table.insert(buildLayers, layer)
+	local zeroLength = true
+	for i in pairs(resolvedDependencies) do
+		zeroLength = false
+		break
+	end
+	if zeroLength then return {false, "No starting (independent) module found"} end
+	while #unresolvedDependencies > 0 do
+		local lastLayer = buildLayers[#buildLayers]
+		local toRemove = {}
+		local layer = {}
+		for i=1,#unresolvedDependencies do
+			local thisModule = unresolvedDependencies[i]
+			local thisModuleDependencies = thisModule.dependencies
+			for j=1,#lastLayer do
+				local thisModuleDependency = thisModuleDependencies[lastLayer[j]]
+				if thisModuleDependency then thisModuleDependency = nil end
+			end
+			local allFound = true 
+			for j in pairs(thisModuleDependencies) do
+				if not resolvedDependencies[j] then
+					allFound = false
+					break
+				end
+			end
+			if allFound then 
+				local thisModuleName = thisModule.module
+				table.insert(layer, thisModuleName)
+				table.insert(toRemove, i) 
+				table.insert(resolvedDependencies, thisModuleName)
+			end
+		end
+		for i=#toRemove,1,-1 do table.remove(unresolvedDependencies, toRemove[i]) end 
+		if #layer == 0 and #unresolvedDependencies ~= 0 then return {false, "Modules have unsatisfied dependencies", unresolved = {unresolvedDependencies}} end
+		table.insert(buildLayers, layer)
+	end
+	return {true}
+end
+local dependencyCreationResult = createDependencyTree()
+if not dependencyCreationResult[1] then
+	print(dependencyCreationResult[2])
+end
 visibleModule = moduleNames[1]
+for i=1,#buildLayers do
+	local layer = buildLayers[i]
+	print("Build layer " .. i .. " modules:")
+	for j=1,#layer do
+		print(layer[j])
+	end
+end
+function printModuleNotImplError(functionName, moduleName)
+	print("Module " .. moduleName .. "'s returned object does not implement required function " .. functionName .. "()")
+end
+local checkedFunctions = {init = true, emptyCheck = true}
+function checkModuleObject(obj, moduleName)
+	for i in pairs(checkedFunctions) do
+		if obj[i] == nil then
+			printModuleNotImplError(i, moduleName)
+			return false
+		end
+	end
+	return true
+end
 modules = {}
 for i=1,#moduleNames do
 	local moduleName = moduleNames[i]
 	require(moduleName)
+	if getModuleObject == nil then
+		print("Module " .. moduleName .. " does not implement the required getModuleObject() function")
+		love.event.quit()
+		return
+	end
+	local moduleObject = getModuleObject()
+	if not checkModuleObject(moduleObject, moduleName) then
+		love.event.quit()
+		return
+	end
 	modules[moduleName] = {module = getModuleObject()}
+	getModuleObject = nil
 end
 minesweeper = {
 	global = {
